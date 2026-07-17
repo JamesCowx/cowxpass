@@ -103,6 +103,15 @@ app.put('/api/vault', auth, (req, res) => {
   res.json({ updatedAt: now });
 });
 
+app.post('/api/auth/salt', (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Missing email' });
+  const db = readDb();
+  const user = db.users.find(u => u.email === email);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  res.json({ salt: user.salt });
+});
+
 app.get('/api/health', (req, res) => {
   const db = readDb();
   res.json({ ok: true, users: db.users.length });

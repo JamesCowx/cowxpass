@@ -1186,39 +1186,58 @@ document.getElementById('authSubmit').addEventListener('click', async function()
       unlockUI(email);
     } else {
       const u = users[email];
-      // Try server login first for multi-device sync
-      let serverVault = null;
-      try { serverVault = await syncLogin(email, await deriveAuthHash(pass, (u && u.salt) || 's')); } catch(e) {}
-      if (serverVault && cryptoKey) {
+      if (u) {
+        // Local user exists — verify locally, then try server sync
+        cryptoKey = await deriveKey(pass, u.salt, u.iters);
+        const hash = await deriveAuthHash(pass, u.salt);
+        if (hash !== u.hash) { resetAuthBtn(btn); return showAuthError('Incorrect master password.'); }
+        let serverVault = null;
+        try { serverVault = await syncLogin(email, hash); } catch(e) {}
+        if (serverVault) {
+          try {
+            const pt = await decryptData(cryptoKey, serverVault.iv, serverVault.ciphertext);
+            const decrypted = JSON.parse(pt);
+            if (decrypted) data = decrypted;
+            await saveEncryptedVault(email);
+            currentUser = email;
+            unlockUI(email);
+            return;
+          } catch(e) { /* fall through to local */ }
+        }
+        const decrypted = await decryptVault(email);
+        if (decrypted) data = decrypted;
+        currentUser = email;
+        if (!syncToken) { try { await syncLogin(email, hash); } catch(e) {} }
+        unlockUI(email);
+      } else {
+        // No local user — fetch salt from server
+        let salt;
         try {
-          const pt = await decryptData(cryptoKey, serverVault.iv, serverVault.ciphertext);
-          const decrypted = JSON.parse(pt);
-          if (decrypted) data = decrypted;
-          await saveEncryptedVault(email);
-          if (!u) {
-            const salt = ab2b64(crypto.getRandomValues(new Uint8Array(16)));
-            const hash = await deriveAuthHash(pass, salt);
-            users[email] = { hash, salt, iters: PBKDF2_ITERS, created: Date.now() };
-            saveUsers(users);
-          }
-          currentUser = email;
-          unlockUI(email);
-          return;
-        } catch(e) { /* fall through to local */ }
+          const sr = await fetch('/api/auth/salt', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+          });
+          if (!sr.ok) throw new Error();
+          const sd = await sr.json();
+          salt = sd.salt;
+        } catch(e) { resetAuthBtn(btn); return showAuthError('No account found. Register first or connect to server.'); }
+        cryptoKey = await deriveKey(pass, salt, PBKDF2_ITERS);
+        const hash = await deriveAuthHash(pass, salt);
+        let serverVault;
+        try { serverVault = await syncLogin(email, hash); } catch(e) { resetAuthBtn(btn); return showAuthError('Incorrect master password.'); }
+        if (serverVault) {
+          try {
+            const pt = await decryptData(cryptoKey, serverVault.iv, serverVault.ciphertext);
+            const decrypted = JSON.parse(pt);
+            if (decrypted) data = decrypted;
+          } catch(e) {}
+        }
+        users[email] = { hash, salt, iters: PBKDF2_ITERS, created: Date.now() };
+        saveUsers(users);
+        await saveEncryptedVault(email);
+        currentUser = email;
+        unlockUI(email);
       }
-      // Local fallback
-      if (!u) { resetAuthBtn(btn); return showAuthError('No account found. Register first or connect to the server.'); }
-      cryptoKey = await deriveKey(pass, u.salt, u.iters);
-      const hash = await deriveAuthHash(pass, u.salt);
-      if (hash !== u.hash) { resetAuthBtn(btn); return showAuthError('Incorrect master password.'); }
-      const decrypted = await decryptVault(email);
-      if (decrypted) data = decrypted;
-      currentUser = email;
-      // Try sync on next save
-      if (!syncToken) {
-        try { await syncLogin(email, hash); } catch(e) {}
-      }
-      unlockUI(email);
     }
   } catch(e) {
     showAuthError('Something went wrong. Check console.');
