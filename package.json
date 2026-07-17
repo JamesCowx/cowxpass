@@ -1,0 +1,14 @@
+{
+  "name": "cowxpass",
+  "version": "1.0.0",
+  "description": "Encrypted password manager with AES-256-GCM — zero-knowledge, multi-device sync",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

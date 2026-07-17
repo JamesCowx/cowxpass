@@ -1,0 +1,7 @@
+node_modules/
+cowxpass.db
+cowxpass.json
+.env
+*.db-journal
+*.db-wal
+*.db-shm
