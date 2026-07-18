@@ -95,7 +95,7 @@ body::after {
   background: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.07'/%3E%3C/svg%3E");
   opacity: 0.5;
 }
-.light body::after { opacity: 0.25; }
+body.light::after { opacity: 0.25; }
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -1397,6 +1397,9 @@ function toggleDetailPw() {
 }
 
 function addAccountModal() {
+  if (userTier === 'free' && data.accounts.length >= FREE_LIMITS.accounts) {
+    return showUpgradeModal('accounts', 'You have reached the free limit of ' + FREE_LIMITS.accounts + ' accounts.');
+  }
   showModal('<h2>Add Account</h2><div class="form-full input-group"><label>Service Name</label><input type="text" id="fmName" placeholder="e.g. Google, GitHub..."></div><div class="form-full input-group"><label>Website URL</label><input type="text" id="fmUrl" placeholder="e.g. google.com"></div><div class="form-row"><div class="input-group"><label>Username / Email</label><input type="text" id="fmUser" placeholder="you@example.com"></div><div class="input-group"><label>Password</label><input type="password" id="fmPass" placeholder="Enter password"></div></div><div class="form-full input-group"><label>Category</label><select id="fmCat"><option value="social">Social</option><option value="email">Email</option><option value="finance">Finance</option><option value="work">Work</option><option value="other">Other</option></select></div><div class="modal-actions"><button class="btn btn-secondary" onclick="hideModal()">Cancel</button><button class="btn btn-primary" onclick="saveNewAccount()">Save Account</button></div>');
 }
 window.saveNewAccount=function(){
@@ -1539,7 +1542,6 @@ function renderGenerator() {
 }
 
 document.querySelectorAll('.sidebar-nav button').forEach(btn=>{ btn.addEventListener('click',()=>navigateTo(btn.dataset.page)); });
-document.getElementById('addAccountBtn').addEventListener('click',addAccountModal);
 document.getElementById('addNoteBtn').addEventListener('click',addNoteModal);
 document.getElementById('searchInput').addEventListener('input',renderVault);
 document.querySelectorAll('#filterTabs button').forEach(btn=>{ btn.addEventListener('click',function(){document.querySelectorAll('#filterTabs button').forEach(b=>b.classList.remove('active'));this.classList.add('active');currentFilter=this.dataset.filter;renderVault();}); });
@@ -1642,6 +1644,7 @@ function confirmAction(title, message, onConfirm) {
 
 // ── EXPORT / IMPORT / DELETE ─────
 document.getElementById('exportBtn').addEventListener('click', () => {
+  if (userTier === 'free') return showUpgradeModal('export','Import and export are Pro features. Upgrade to unlock.');
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = 'cowxpass-backup-' + new Date().toISOString().slice(0,10) + '.json';
@@ -1694,16 +1697,6 @@ function deleteAllData() {
   const exportBtn = document.getElementById('exportBtn');
   exportBtn.parentNode.insertBefore(importBtn, exportBtn.nextSibling);
   exportBtn.parentNode.insertBefore(delBtn, importBtn.nextSibling);
-  
-  // Override export for free tier
-  const origExport = exportBtn.onclick || exportBtn._clickFn;
-  exportBtn.addEventListener('click', function(e) {
-    if (userTier === 'free') {
-      e.preventDefault(); e.stopPropagation();
-      showUpgradeModal('export','Import and export are Pro features. Upgrade to unlock.');
-      return false;
-    }
-  }, true);
 })();
 
 document.addEventListener('keydown',function(e){
@@ -1781,15 +1774,6 @@ document.getElementById('mainContent').addEventListener('click', () => {
 document.getElementById('upgradeBtn').addEventListener('click', () => {
   showUpgradeModal('premium','Unlock unlimited accounts, cloud sync, and all Pro features for just $4/month.');
 });
-
-// Override addAccountBtn to check tier
-document.getElementById('addAccountBtn').addEventListener('click', function(e) {
-  if (userTier === 'free' && data.accounts.length >= FREE_LIMITS.accounts) {
-    showUpgradeModal('accounts', 'You have reached the free limit of ' + FREE_LIMITS.accounts + ' accounts.');
-    return;
-  }
-  addAccountModal();
-}, true);
 </script>
 
 </body>

@@ -24,7 +24,9 @@ function readDb() {
   catch { return { users: [], vaults: [] }; }
 }
 function writeDb(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+  const tmp = DB_PATH + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, DB_PATH);
 }
 
 // Init DB file
@@ -33,6 +35,12 @@ console.log('Database ready');
 
 // ── Rate limiter ──────────────────
 const rateLimitMap = new Map();
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, r] of rateLimitMap) {
+    if (now > r.reset + 60000) rateLimitMap.delete(ip);
+  }
+}, 60000);
 function rateLimiter(max, ms) {
   return (req, res, next) => {
     const ip = req.ip || '::1';
@@ -81,7 +89,8 @@ app.get('/api/vault', auth, (req, res) => {
   const db = readDb();
   const v = db.vaults.find(v => v.user_id === req.user.id);
   if (!v) return res.json({ encrypted: null, updatedAt: null });
-  res.json({ encrypted: JSON.parse(v.encrypted_data), updatedAt: v.updated_at });
+  try { res.json({ encrypted: JSON.parse(v.encrypted_data), updatedAt: v.updated_at }); }
+  catch (e) { res.json({ encrypted: null, updatedAt: null }); }
 });
 
 app.put('/api/vault', auth, (req, res) => {
