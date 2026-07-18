@@ -887,6 +887,10 @@ body::after {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         <span id="themeLabel">Light Mode</span>
       </button>
+      <button id="syncBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6M3 22v-6h6"/><path d="M21 8a9 9 0 01-15 7.5M3 16a9 9 0 0115-7.5"/></svg>
+        Sync Now
+      </button>
       <button id="exportBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Export Data
@@ -1130,7 +1134,26 @@ async function syncUpload() {
       method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + syncToken },
       body: JSON.stringify({ encrypted: record.encrypted, clientUpdatedAt: 0 })
     });
-    updateSyncUI();
+    syncAvailable = true; updateSyncUI();
+  } catch(e) { syncAvailable = false; updateSyncUI(); }
+}
+
+async function syncPull() {
+  if (!syncToken || !cryptoKey) return;
+  try {
+    const r = await fetch('/api/vault', { headers: { 'Authorization': 'Bearer ' + syncToken } });
+    if (!r.ok) throw new Error();
+    const vd = await r.json();
+    if (vd.encrypted) {
+      const pt = await decryptData(cryptoKey, vd.encrypted.iv, vd.encrypted.ciphertext);
+      const server = JSON.parse(pt);
+      if (server && server.accounts && server.notes) {
+        data = server;
+        await saveEncryptedVault(currentUser);
+        syncAvailable = true; updateSyncUI();
+        renderAll();
+      }
+    }
   } catch(e) { syncAvailable = false; updateSyncUI(); }
 }
 
@@ -1532,6 +1555,29 @@ document.getElementById('themeToggle').addEventListener('click',()=>{
   document.getElementById('themeLabel').textContent=darkMode?'Light Mode':'Dark Mode';
   document.getElementById('themeToggle').querySelector('svg').innerHTML=darkMode?'<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>':'<circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
 });
+
+document.getElementById('syncBtn').addEventListener('click', async function() {
+  const btn = this; const orig = btn.innerHTML;
+  btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;"><path d="M21 2v6h-6M3 22v-6h6"/><path d="M21 8a9 9 0 01-15 7.5M3 16a9 9 0 0115-7.5"/></svg> Syncing...';
+  btn.disabled = true;
+  try {
+    await syncUpload();
+    await syncPull();
+    toast('Vault synced!');
+  } catch(e) { toast('Sync failed'); }
+  btn.innerHTML = orig;
+  btn.disabled = false;
+});
+
+// Auto-pull on tab focus
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && syncToken && cryptoKey) syncPull().catch(() => {});
+});
+
+// Add spin animation for sync icon
+const spinStyle = document.createElement('style');
+spinStyle.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
+document.head.appendChild(spinStyle);
 
 // ── TIER / UPGRADE ───────────────
 function showUpgradeModal(feature, msg) {
